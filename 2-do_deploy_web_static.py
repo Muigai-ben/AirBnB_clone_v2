@@ -1,58 +1,38 @@
 #!/usr/bin/python3
-""" a module for fabric script script that generates a .tgz archive."""
+from fabric.api import env, put, run
 import os
-from datetime import datetime
-from fabric.api import *
 
-env.user = "ubuntu"
-env.hosts = ["3.83.245.100", "107.23.155.200"]
-"""The list of host server IP addresses."""
-
-
-@runs_once
-def do_pack():
-    """Archives the static files."""
-    if not os.path.isdir("versions"):
-        os.mkdir("versions")
-    d_time = datetime.now()
-    output = "versions/web_static_{}{}{}{}{}{}.tgz".format(
-        d_time.year,
-        d_time.month,
-        d_time.day,
-        d_time.hour,
-        d_time.minute,
-        d_time.second
-    )
-    try:
-        print("Packing web_static to {}".format(output))
-        local("tar -cvzf {} web_static".format(output))
-        size = os.stat(output).st_size
-        print("web_static packed: {} -> {} Bytes".format(output, size))
-    except Exception:
-        output = None
-    return output
+env.user = 'ubuntu'
+env.hosts = ['<	100.26.136.91>', '<34.229.49.49>']
 
 
 def do_deploy(archive_path):
-    """
-        Distribute archive.
-    """
-    if os.path.exists(archive_path):
-        archived_file = os.path.basename(archive_path)
-        newest_version = "/data/web_static/releases/" + archived_file[:-4]
-        archived_file = "/tmp/" + archived_file
-        put(archive_path, "/tmp/")
-        run("sudo mkdir -p {}".format(newest_version))
-        run("sudo tar -xzf {} -C {}/".format(archived_file,
-                                             newest_version))
-        run("sudo rm {}".format(archived_file))
-        run("sudo mv {}/web_static/* {}".format(newest_version,
-                                                newest_version))
-        run("sudo rm -rf {}/web_static".format(newest_version))
-        run("sudo rm -rf /data/web_static/current")
-        run("sudo ln -s {} /data/web_static/current".format(newest_version))
+    if not os.path.exists(archive_path):
+        return False
 
-        print("New version deployed!")
+    try:
+        # Upload the archive to the /tmp/ directory of the web server
+        put(archive_path, '/tmp/')
+
+        # Extract the archive to /data/web_static/releases/<archive filename without extension>
+        filename = os.path.basename(archive_path)
+        folder_name = '/data/web_static/releases/{}'.format(os.path.splitext(filename)[0])
+        run('mkdir -p {}'.format(folder_name))
+        run('tar -xzf /tmp/{} -C {}'.format(filename, folder_name))
+
+        # Delete the archive from the web server
+        run('rm /tmp/{}'.format(filename))
+
+        # Delete the symbolic link /data/web_static/current
+        current_link = '/data/web_static/current'
+        run('rm -f {}'.format(current_link))
+
+        # Create a new symbolic link /data/web_static/current
+        run('ln -s {} {}'.format(folder_name, current_link))
+
+        print('New version deployed!')
         return True
-    else:
+
+    except Exception as e:
+        print('Deployment failed: {}'.format(e))
         return False
